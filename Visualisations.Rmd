@@ -1,0 +1,83 @@
+---
+title: "Visualisations"
+author: "Melle Stephen Oudshoorn"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+
+df <- read.csv("strava_data/cleaned_subset.csv")
+```
+
+```{r}
+head(df)
+```
+
+```{r distance analysis}
+# Calculate total distance per activity type
+distance_summary <- df %>%
+  group_by(activity_type) %>%
+  summarise(
+    total_distance_km = sum(distance, na.rm = TRUE) / 1000,
+    count = n()
+  )
+
+# Overall total distance
+cat("Total distance:", sum(df$distance, na.rm = TRUE) / 1000, "kilometers\n")
+
+# Print distance per activity type using cat()
+if ("Hardloopsessie" %in% distance_summary$activity_type) {
+  cat("Total distance ran:", distance_summary$total_distance_km[distance_summary$activity_type == "Hardloopsessie"], "kilometers\n")
+}
+
+if ("Fietsrit" %in% distance_summary$activity_type) {
+  cat("Total distance biked:", distance_summary$total_distance_km[distance_summary$activity_type == "Fietsrit"], "kilometers\n")
+}
+```
+
+```{r}
+month_levels <- c("jan", "feb", "mrt", "apr", "mei", "jun", 
+                  "jul", "aug", "sep", "okt", "nov", "dec")
+
+monthly_activity_distance <- df %>%
+  filter(year == max(df$year, na.rm = TRUE)) %>%
+  group_by(month, activity_type) %>%
+  summarise(total_distance = sum(distance, na.rm = TRUE) / 1000) %>%
+  mutate(month = factor(month, levels = month_levels))
+
+ggplot(data = monthly_activity_distance, aes(x = month, y = total_distance, fill = activity_type)) + 
+  geom_bar(stat = "identity") +
+  labs(
+    title = paste("Total Distance per Month by Activity Type in", max(df$year, na.rm = TRUE)),
+    x = "Month",
+    y = "Distance (km)",
+    fill = "Activity Type"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+month_levels <- c("jan", "feb", "mrt", "apr", "mei", "jun", 
+                  "jul", "aug", "sep", "okt", "nov", "dec")
+
+monthly_activity_elapsed_time <- df %>%
+  filter(year == max(df$year, na.rm = TRUE)) %>%
+  group_by(month, activity_type) %>%
+  summarise(total_elapsed_time = sum(elapsed_time, na.rm = TRUE) / 3600) %>%
+  mutate(month = factor(month, levels = month_levels))
+
+ggplot(data = monthly_activity_elapsed_time, aes(x = month, y = total_elapsed_time, fill = activity_type)) + 
+  geom_bar(stat = "identity") +
+  labs(
+    title = paste("Total elapsed time per Month by Activity Type in", max(df$year, na.rm = TRUE)),
+    x = "Month",
+    y = "Elapsed time (hours)",
+    fill = "Activity Type"
+  ) +
+  theme_minimal()
+```
+

@@ -79,5 +79,4 @@ df <- activities %>%
     year, month, weekday, hour, speed_ratio, elevation_gain_per_km, duration_hours, pace_min_per_km
   )
 
-
-write_csv(df, "strava_data/cleaned_subset_df")
+write_csv(df, "strava_data/cleaned_subset.csv")
