@@ -47,7 +47,7 @@ df <- activities %>%
     intensity = `Intensiteit`
   ) %>%
   mutate(
-    activity_date = dmy_hms(df$activity_date),
+    activity_date = dmy_hms(activity_date),
     start_time = as.POSIXct(start_time),
     elapsed_time = as.numeric(elapsed_time),
     moving_time = as.numeric(moving_time),
@@ -78,3 +78,6 @@ df <- activities %>%
     start_time, commute, bike_used, training_load, intensity,
     year, month, weekday, hour, speed_ratio, elevation_gain_per_km, duration_hours, pace_min_per_km
   )
+
+
+write_csv(df, "strava_data/cleaned_subset_df")
