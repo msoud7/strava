@@ -4,79 +4,76 @@ setwd(dir)
 library(readr)
 library(dplyr)
 library(lubridate)
+library(janitor)
+
 Sys.setlocale("LC_TIME", "nl_NL.UTF-8")
 
-activities <- read_csv("strava_data/activities.csv")
+activities <- read.csv("strava_data/activities.csv")
+
+#calculate NA's by column
+colSums(is.na(activities))
 
 df <- activities %>% 
+  select(where(~ sum(!is.na(.)) > 0)) #calculate number of usable observations 
+
+cat("Removed observations with 0 usable variables:", length(colnames(activities)) - length(colnames(df)))
+
+colSums(!is.na(df))
+
+#remove unnecessary observations with no statistical meaning
+df <- df %>% 
+  select(-c(Beschrijving.van.activiteit, Woon.werkverkeer, Privénotitie.activiteit, Uitrusting.voor.activiteit, Aantal.vermogensgegevens, Woon.werkverkeer.1, Uitrusting, Media, Bestandsnaam,
+            Weersomstandigheden, Buitentemperatuur, Gevoelstemperatuur, Dauwpunt, Vochtigheid, Luchtdruk, Windsnelheid, Windstoot, Windrichting, Neerslagintensiteit, Tijd.zonsondergang, Tijd.zonsopgang, Maanstand, Uitrusting, Kans.op.neerslag, Type.neerslag, Bewolking, Zicht, UV.index,
+            Verstreken.tijd.1, Afstand, Max..hartslag, Vergelijkbare.poging.1, Voorkeur.voor.ervaren.inspanning, Ervaren.vergelijkbare.poging, Van.upload, Gemeld, Afstand..onverharde.wegen., Trainingsbelasting, Totaalaantal.cycli, Gemiddelde.vergelijkbare.tempo.op.vlak.terrein
+  )) %>% 
   rename(
-    activity_id = `Activiteits-ID`,
-    activity_date = `Datum van activiteit`,
-    activity_name = `Naam activiteit`,
-    activity_type = `Activiteitstype`,
-    description = `Beschrijving van activiteit`,
-    elapsed_time = `Verstreken tijd...16`,
-    moving_time = `Beweegtijd`,
-    distance = `Afstand...18`,
-    max_speed = `Max. snelheid`,
-    avg_speed = `Gemiddelde snelheid`,
-    total_ascent = `Totale stijging`,
-    total_descent = `Totale daling`,
-    min_elevation = `Kleinste hoogte`,
-    max_elevation = `Grootste hoogte`,
-    max_grade = `Max. stijgingspercentage`,
-    avg_grade = `Gemiddeld stijgingspercentage`,
-    max_cadence = `Max. cadans`,
-    avg_cadence = `Gemiddelde cadans`,
-    max_heart_rate = `Max. hartslag...31`,
-    avg_heart_rate = `Gemiddelde hartslag`,
-    max_power = `Maximaal wattage`,
-    avg_power = `Gemiddeld wattage`,
-    weighted_avg_power = `Gewogen gemiddeld vermogen`,
-    calories = `Calorieën`,
-    temperature = `Buitentemperatuur`,
-    feels_like_temp = `Gevoelstemperatuur`,
-    humidity = `Vochtigheid`,
-    wind_speed = `Windsnelheid`,
-    precipitation = `Neerslagintensiteit`,
-    perceived_exertion = `Ervaren inspanning`,
-    start_time = `Starttijd`,
-    commute = `Woon-werkverkeer...51`,
-    bike_used = `Fiets`,
-    training_load = `Trainingsbelasting`,
-    intensity = `Intensiteit`
-  ) %>%
+    activity_id = Activiteits.ID,
+    activity_date = Datum.van.activiteit,
+    activity_name = Naam.activiteit,
+    activity_type = Activiteitstype,
+    elapsed_time = Verstreken.tijd,
+    comparable_effort = Vergelijkbare.poging,
+    moving_time = Beweegtijd,
+    distance = Afstand.1,
+    max_speed = Max..snelheid,
+    avg_speed = Gemiddelde.snelheid,
+    total_ascent = Totale.stijging,
+    total_descent = Totale.daling,
+    min_elevation = Kleinste.hoogte,
+    max_elevation = Grootste.hoogte,
+    max_grade = Max..stijgingspercentage,
+    avg_grade = Gemiddeld.stijgingspercentage,
+    max_cadence = Max..cadans,
+    avg_cadence = Gemiddelde.cadans,
+    max_heart_rate = Max..hartslag.1,
+    avg_heart_rate = Gemiddelde.hartslag,
+    avg_power = Gemiddeld.wattage,
+    calories = Calorieën,
+    total_work = Totale.arbeid,
+    perceived_exertion = Ervaren.inspanning,
+    weighted_avg_power = Gewogen.gemiddeld.vermogen,
+    grade_adjusted_distance = Aan.stijgingspercentage.aangepaste.afstand,
+    weather_time = Tijd.weerbeeld,
+    avg_speed_elapsed = Gemiddelde.snelheid..op.basis.van.verstreken.tijd.,
+    total_steps = Totaal.aantal.stappen,
+    pool_length = Lengte.van.zwembad,
+    intensity = Intensiteit
+  ) %>% 
   mutate(
-    activity_date = dmy_hms(activity_date),
-    start_time = as.POSIXct(start_time),
-    elapsed_time = as.numeric(elapsed_time),
-    moving_time = as.numeric(moving_time),
-    distance = as.numeric(distance),
-    max_speed = as.numeric(max_speed),
-    avg_speed = as.numeric(avg_speed),
-    total_ascent = as.numeric(total_ascent),
-    calories = as.numeric(calories),
-    commute = as.logical(commute),
+    activity_date = parse_date_time(activity_date, orders = "d b Y H:M:S", locale = "nl_NL.UTF-8"),
+    hour = hour(activity_date),
+    weekday = wday(activity_date, label = TRUE, locale = "nl_NL.UTF-8"),
+    week = week(activity_date),
+    month = month(activity_date, label = TRUE, locale = "nl_NL.UTF-8"),
     year = year(activity_date),
-    month = month(activity_date, label = TRUE),
-    weekday = wday(activity_date, label = TRUE),
-    hour = hour(start_time),
-    speed_ratio = max_speed / avg_speed,
-    elevation_gain_per_km = total_ascent / (distance / 1000),
-    duration_hours = elapsed_time / 3600,
-    pace_min_per_km = ifelse(activity_type == "Run", 
-                             (moving_time / 60) / (distance / 1000), NA)
-  ) %>%
-  select(
-    activity_id, activity_date, activity_name, activity_type, description,
-    elapsed_time, moving_time, distance, max_speed, avg_speed,
-    total_ascent, total_descent, min_elevation, max_elevation,
-    max_grade, avg_grade, max_cadence, avg_cadence,
-    max_heart_rate, avg_heart_rate, max_power, avg_power,
-    weighted_avg_power, calories, temperature, feels_like_temp,
-    humidity, wind_speed, precipitation, perceived_exertion,
-    start_time, commute, bike_used, training_load, intensity,
-    year, month, weekday, hour, speed_ratio, elevation_gain_per_km, duration_hours, pace_min_per_km
+    distance_km = distance / 1000, #distance in km
+    pace = if_else(activity_type == "Hardloopsessie",                    # only for running m/s
+                   moving_time / 60 / distance_km, 
+                   NA_real_),
+    speed = distance_km / (moving_time / 3600), #km/h
+    elevation_difference = max_elevation - min_elevation,
   )
+
+  
 
 write_csv(df, "strava_data/cleaned_subset.csv")
