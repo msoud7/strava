@@ -13,9 +13,15 @@ library(ggplot2)
 library(forcats)
 
 df <- read.csv("strava_data/cleaned_subset.csv")
+df$activity_date <- as.Date(df$activity_date)
+
+month_levels <- c("jan", "feb", "mrt", "apr", "mei", "jun", 
+                  "jul", "aug", "sep", "okt", "nov", "dec")
 ```
 
-```{r}
+# Descriptive statistics and tables
+
+```{r heading of the information}
 head(df)
 head_df <- head(df)
 ```
@@ -42,10 +48,9 @@ if ("Fietsrit" %in% distance_summary$activity_type) {
 }
 ```
 
-```{r}
-month_levels <- c("jan", "feb", "mrt", "apr", "mei", "jun", 
-                  "jul", "aug", "sep", "okt", "nov", "dec")
+# Training Load statistics
 
+```{r total distance per month of the most recent year}
 monthly_activity_distance <- df %>%
   filter(year == max(df$year, na.rm = TRUE)) %>%
   group_by(month, activity_type) %>%
@@ -63,10 +68,7 @@ ggplot(data = monthly_activity_distance, aes(x = month, y = total_distance, fill
   theme_minimal()
 ```
 
-```{r}
-month_levels <- c("jan", "feb", "mrt", "apr", "mei", "jun", 
-                  "jul", "aug", "sep", "okt", "nov", "dec")
-
+```{r elapsed time per month by activity in the most recent year}
 monthly_activity_elapsed_time <- df %>%
   filter(year == max(df$year, na.rm = TRUE)) %>%
   group_by(month, activity_type) %>%
@@ -84,17 +86,7 @@ ggplot(data = monthly_activity_elapsed_time, aes(x = month, y = total_elapsed_ti
   theme_minimal()
 ```
 
-```{r average heart rate by distance}
-ggplot(data = df %>% filter(distance > 0), aes(x = distance / 1000, y = avg_heart_rate, color = activity_type)) +
-  geom_point() +
-  labs(
-    y = "Average Heart rate",
-    x = "Distance",
-    title = "Average heart rate by distance"
-    )
-```
-
-```{r}
+```{r total elasped time per weekday!}
 weekday_levels <- c("ma", "di", "wo", "do", "vr", "za", "zo")
 
 monthly_activity_elapsed_time <- df %>%
@@ -113,20 +105,6 @@ ggplot(data = monthly_activity_elapsed_time, aes(x = weekday, y = total_elapsed_
   theme_minimal()
 ```
 
-```{r training volume}
-ggplot(data = df, aes(x = activity_date, y = distance / 1000, color = activity_type)) +
-  geom_line(color = "#2C3E50", linewidth = 0.7) +  # darker line
-  geom_point() +
-  geom_smooth(method = "loess", se = FALSE, color = "steelblue", linewidth = 1) +  # optional trend
-  labs(
-    title = "Training Volume Over Time",
-    subtitle = "Distance per Activity",
-    y = "Distance (km)",
-    x = "Date"
-  ) +
-  theme_minimal(base_size = 12)
-```
-
 ```{r activity frequency by weekday and hour}
 df %>%
   count(weekday, hour) %>%
@@ -139,83 +117,18 @@ df %>%
   theme_minimal()
 ```
 
-```{r heart rate versus speed}
-ggplot(data = df %>% filter(activity_type == "Hardloopsessie"), 
-       aes(x = avg_heart_rate, y = pace)) +
-  geom_point(alpha = 0.6, color = "#2E8B57") +
-  geom_smooth(method = "loess", se = FALSE, color = "black", linetype = "dashed") +
-  scale_y_reverse() +  # Faster pace = lower value, so invert
-  labs(
-    y = "Pace (min/km)",
-    x = "Average Heart Rate (bpm)",
-    title = "Average Running Pace vs. Heart Rate",
-    subtitle = "Per session (Hardloopsessie)"
-  ) +
-  xlim(120, 205) + 
-  ylim(4, 8) +
-  theme_minimal()
-
-```
-
-```{r elevation gain per activity}
-ggplot(df, aes(x = activity_date, y = total_ascent)) +
-  geom_col(fill = "darkgreen") +
-  labs(title = "Elevation Gain per Activity", x = "Date", y = "Total Ascent (m)") +
-  theme_minimal()
-```
-
-```{r}
-df %>%
-  count(month) %>%
-  mutate(month = factor(month, levels = month_levels)) %>%
-  ggplot(aes(x = month, y = n)) +
-  geom_col(fill = "coral") +
-  coord_polar() +
-  labs(title = "Activities per Month (Polar Plot)") +
-  theme_minimal()
-```
-
-```{r}
-ggplot(df %>% filter(activity_type == "Hardloopsessie"), aes(x = as.Date(activity_date), y = distance/1000)) +
-  geom_point(alpha = 0.5, color = "#2E8B57") +
-  geom_smooth(method = "loess", se = TRUE, color = "black") +
-  labs(
-    title = "Distance Over Time",
-    x = "Date",
-    y = "Distance (km)"
-  ) +
-  theme_minimal()
-
-```
-
 ```{r cumulative distance over time}
 df %>%
-  arrange(activity_date) %>%
-  mutate(cumulative_distance_km = cumsum(distance / 1000)) %>%
-  ggplot(aes(x = activity_date, y = cumulative_distance_km, color = activity_type)) +
+  arrange(activity_type, activity_date) %>%
+  group_by(activity_type) %>%
+  mutate(cumulative_distance = cumsum(distance / 1000)) %>%
+  ggplot(aes(x = activity_date, y = cumulative_distance, color = activity_type)) +
   geom_line(size = 1) +
-  labs(title = "Cumulative Distance Over Time", x = "Date", y = "Cumulative Distance (km)") +
+  labs(
+    title = "Cumulative Distance Over Time by Activity Type",
+    x = "Date", y = "Cumulative Distance (km)"
+  ) +
   theme_minimal()
-```
-
-```{r distribution of pace}
-df %>%
-  filter(activity_type == "Hardloopsessie", !is.na(pace)) %>%
-  ggplot(aes(x = activity_type, y = pace)) +
-  geom_violin(fill = "skyblue") +
-  geom_boxplot(width = 0.1, fill = "white") +
-  labs(title = "Distribution of Pace for Running Sessions", y = "Pace (min/km)") +
-  theme_minimal()
-```
-
-```{r correlation matrix, message=FALSE}
-library(GGally)
-
-df_numeric <- df %>%
-  select(pace, avg_heart_rate, distance_km, total_ascent, avg_power, avg_cadence) %>%
-  na.omit()
-
-ggpairs(df_numeric)
 ```
 
 ```{r activity frequency by moonth and year}
@@ -239,6 +152,59 @@ ggplot(df, aes(x = elapsed_time / 60)) +
   theme_minimal()
 ```
 
+# Performance statistics
+
+```{r average heart rate by distance}
+ggplot(data = df %>% filter(distance > 0), aes(x = distance / 1000, y = avg_heart_rate, color = activity_type)) +
+  geom_point() +
+  labs(
+    y = "Average Heart rate",
+    x = "Distance",
+    title = "Average heart rate by distance"
+    )
+```
+
+```{r heart rate versus speed}
+ggplot(data = df %>% filter(activity_type == "Hardloopsessie"), 
+       aes(x = avg_heart_rate, y = pace)) +
+  geom_point(alpha = 0.6, color = "#2E8B57") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linetype = "dashed") +
+  scale_y_reverse() +  # Faster pace = lower value, so invert
+  labs(
+    y = "Pace (min/km)",
+    x = "Average Heart Rate (bpm)",
+    title = "Average Running Pace vs. Heart Rate",
+    subtitle = "Per session (Hardloopsessie)"
+  ) +
+  xlim(120, 205) + 
+  ylim(4, 8) +
+  theme_minimal()
+
+```
+
+```{r distance of running sessions over time}
+ggplot(df %>% filter(activity_type == "Hardloopsessie"), aes(x = as.Date(activity_date), y = distance/1000)) +
+  geom_point(alpha = 0.5, color = "#2E8B57") +
+  geom_smooth(method = "loess", se = TRUE, color = "black") +
+  labs(
+    title = "Distance Over Time",
+    x = "Date",
+    y = "Distance (km)"
+  ) +
+  theme_minimal()
+
+```
+
+```{r distribution of pace}
+df %>%
+  filter(activity_type == "Hardloopsessie", !is.na(pace)) %>%
+  ggplot(aes(x = activity_type, y = pace)) +
+  geom_violin(fill = "skyblue") +
+  geom_boxplot(width = 0.1, fill = "white") +
+  labs(title = "Distribution of Pace for Running Sessions", y = "Pace (min/km)") +
+  theme_minimal()
+```
+
 ```{r pace improvement over time}
 df %>%
   filter(activity_type == "Hardloopsessie", !is.na(pace)) %>%
@@ -251,12 +217,49 @@ df %>%
 
 ```
 
-```{r power vs heart rate cycling scatter plot}
+```{r training load proxy}
 df %>%
-  filter(activity_type == "Fietsrit", !is.na(avg_power), !is.na(avg_heart_rate)) %>%
-  ggplot(aes(x = avg_power, y = avg_heart_rate)) +
-  geom_point(alpha = 0.6, color = "purple") +
-  labs(title = "Average Power vs Heart Rate (Cycling)", x = "Avg Power (W)", y = "Avg Heart Rate (bpm)") +
+  filter(activity_type == "Hardloopsessie") %>%
+  mutate(training_stress = (distance_km * avg_heart_rate)) %>%
+  ggplot(aes(x = activity_date, y = training_stress)) +
+  geom_point(color = "tomato") +
+  geom_smooth(method = "loess", color = 'maroon', se = TRUE) +
+  labs(title = "Training Stress Over Time", y = "Stress (Distance × HR)", x = "Date") +
   theme_minimal()
 ```
 
+```{r}
+df %>%
+  filter(!is.na(avg_heart_rate)) %>%
+  mutate(hr_zone = case_when(
+    avg_heart_rate < 120 ~ "Zone 1",
+    avg_heart_rate < 140 ~ "Zone 2",
+    avg_heart_rate < 160 ~ "Zone 3",
+    avg_heart_rate < 180 ~ "Zone 4",
+    TRUE ~ "Zone 5"
+  ),
+  hr_zone = factor(hr_zone, levels = c("Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"))) %>%
+  count(hr_zone) %>%
+  ggplot(aes(x = hr_zone, y = n, fill = hr_zone)) +
+  geom_col() +
+  labs(
+    title = "Time Spent in Heart Rate Zones",
+    subtitle = "Zone 1 = < 120, Zone 2 = < 140, Zone 3 = < 160, Zone 4 = < 180, Zone 5 = > 180",
+    x = "Heart Rate Zone", y = "Activity Count", fill = "Heart Rate Zone"
+  ) +
+  theme_minimal()
+
+```
+
+
+# Regression stuff
+
+```{r correlation matrix, message=FALSE}
+library(GGally)
+
+df_numeric <- df %>%
+  select(pace, avg_heart_rate, distance_km, total_ascent, avg_power, avg_cadence) %>%
+  na.omit()
+
+ggpairs(df_numeric)
+```
