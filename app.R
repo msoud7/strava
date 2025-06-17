@@ -12,6 +12,7 @@ library(GGally)
 library(shinycssloaders)
 library(htmltools)
 library(readr)
+library(tidyr)
 library(janitor)
 
 # Set locale for Dutch date parsing
@@ -899,18 +900,19 @@ server <- function(input, output, session) {
       head(10)
     
     p <- ggplot(activity_counts, aes(x = reorder(activity_type, n), y = n)) +
-      geom_col(fill = "steelblue", alpha = 0.8) +
+      geom_col(aes(fill = activity_type), alpha = 0.8) +
       coord_flip() +
       labs(title = "Activity Types", x = "Activity Type", y = "Count") +
       theme_minimal()
     
     ggplotly(p)
   })
+
   
   # Data preview table
   output$data_preview <- DT::renderDataTable({
     req(data())
-    DT::datatable(data(), options = list(pageLength = 10, scrollX = TRUE))
+    DT::datatable(data(), options = list(pageLength = 5, scrollX = TRUE))
   })
   
   # Filtered data for training tab
@@ -935,32 +937,69 @@ server <- function(input, output, session) {
     df <- filtered_data()
     
     monthly_data <- df %>%
-      group_by(year, month) %>%
+      group_by(year, month, activity_type) %>%
       summarise(total_distance = sum(distance_km, na.rm = TRUE), .groups = 'drop') %>%
       mutate(month_year = as.Date(paste(year, as.numeric(month), "01", sep = "-")))
     
-    p <- ggplot(monthly_data, aes(x = month_year, y = total_distance)) +
-      geom_line(color = "steelblue", size = 1) +
-      geom_point(color = "steelblue", size = 2) +
-      labs(title = "Monthly Distance", x = "Month", y = "Distance (km)") +
+    p <- ggplot(monthly_data, aes(x = month_year, y = total_distance, fill = activity_type)) +
+      geom_bar(stat = "identity") +
+      labs(
+        title = paste("Total Distance per Month by Activity Type in", max(df$year, na.rm = TRUE)),
+        x = "Month",
+        y = "Distance (km)",
+        fill = "Activity Type"
+      ) +
       theme_minimal() +
       scale_x_date(date_labels = "%b %Y", date_breaks = "2 months")
     
     ggplotly(p)
   })
-  
-  # Weekly activity pattern
-  output$weekday_pattern <- renderPlotly({
+ 
+  # Weekly activity pattern (DISFUNCTIONAL)
+  output$elapsed_time_weekday <- renderPlotly({
     req(filtered_data())
     df <- filtered_data()
     
-    weekday_data <- df %>%
-      count(weekday) %>%
-      mutate(weekday = factor(weekday, levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")))
+    # Make sure weekday is character
+    df <- df %>% mutate(weekday = as.character(weekday))
     
-    p <- ggplot(weekday_data, aes(x = weekday, y = n)) +
-      geom_col(fill = "coral", alpha = 0.8) +
-      labs(title = "Activities by Day of Week", x = "Day", y = "Number of Activities") +
+    # Mapping Dutch weekday abbreviations to English
+    dutch_to_english <- c(
+      "ma" = "Mon",
+      "di" = "Tue",
+      "wo" = "Wed",
+      "do" = "Thu",
+      "vr" = "Fri",
+      "za" = "Sat",
+      "zo" = "Sun"
+    )
+    
+    # Check for unexpected values
+    unknown_days <- setdiff(unique(df$weekday), names(dutch_to_english))
+    if(length(unknown_days) > 0) {
+      warning(paste("Unknown weekday values found:", paste(unknown_days, collapse = ", ")))
+      # Optionally stop or handle differently
+    }
+    
+    # Convert weekdays with recode, default to original if missing
+    df <- df %>% 
+      mutate(weekday_eng = recode(weekday, !!!dutch_to_english, .default = weekday))
+    
+    weekday_levels <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    
+    weekday_data <- df %>%
+      group_by(weekday_eng, activity_type) %>%
+      summarise(total_elapsed_time = sum(elapsed_time, na.rm = TRUE) / 3600, .groups = "drop") %>%
+      mutate(weekday_eng = factor(weekday_eng, levels = weekday_levels))
+    
+    p <- ggplot(weekday_data, aes(x = weekday_eng, y = total_elapsed_time, fill = activity_type)) +
+      geom_col() +
+      labs(
+        title = "Total Elapsed Time per Weekday by Activity Type",
+        x = "Weekday",
+        y = "Elapsed Time (hours)",
+        fill = "Activity Type"
+      ) +
       theme_minimal()
     
     ggplotly(p)
@@ -971,13 +1010,26 @@ server <- function(input, output, session) {
     req(filtered_data())
     df <- filtered_data()
     
+    # Define correct English weekday levels
+    weekday_levels <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    
     heatmap_data <- df %>%
+      mutate(
+        weekday = recode(weekday,
+                         ma = "Mon", di = "Tue", wo = "Wed",
+                         do = "Thu", vr = "Fri", za = "Sat", zo = "Sun")
+      ) %>%
       count(weekday, hour) %>%
-      mutate(weekday = factor(weekday, levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")))
+      complete(weekday, hour = 0:23, fill = list(n = 0)) %>%
+      mutate(
+        weekday = factor(weekday, levels = rev(weekday_levels)),
+        hour = as.integer(hour),
+        n = ifelse(n == 0, NA, n)  # Make zeros transparent
+      )
     
     p <- ggplot(heatmap_data, aes(x = hour, y = weekday, fill = n)) +
-      geom_tile() +
-      scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Activities") +
+      geom_tile(color = "white", na.rm = TRUE) +
+      scale_fill_gradient(low = "lightblue", high = "darkblue", name = "Activities", na.value = NA) +
       labs(title = "Activity Heatmap", x = "Hour of Day", y = "Day of Week") +
       theme_minimal()
     
@@ -990,14 +1042,18 @@ server <- function(input, output, session) {
     df <- filtered_data()
     
     monthly_time <- df %>%
-      group_by(year, month) %>%
+      group_by(year, month, activity_type) %>%
       summarise(total_time = sum(elapsed_time, na.rm = TRUE) / 3600, .groups = 'drop') %>%
       mutate(month_year = as.Date(paste(year, as.numeric(month), "01", sep = "-")))
     
-    p <- ggplot(monthly_time, aes(x = month_year, y = total_time)) +
-      geom_line(color = "darkgreen", size = 1) +
-      geom_point(color = "darkgreen", size = 2) +
-      labs(title = "Monthly Training Time", x = "Month", y = "Time (hours)") +
+    p <- ggplot(monthly_time, aes(x = month_year, y = total_time, fill = activity_type)) +
+      geom_bar(stat = "identity") +
+      labs(
+        title = paste("Total elapsed time per Month by Activity Type in", max(df$year, na.rm = TRUE)),
+        x = "Month",
+        y = "Elapsed time (hours)",
+        fill = "Activity Type"
+      ) +
       theme_minimal() +
       scale_x_date(date_labels = "%b %Y", date_breaks = "2 months")
     
@@ -1010,7 +1066,7 @@ server <- function(input, output, session) {
     df <- filtered_data()
     
     p <- ggplot(df, aes(x = elapsed_time / 60)) +
-      geom_histogram(bins = 30, fill = "purple", alpha = 0.7) +
+      geom_histogram(binwidth = 10, fill = "purple", alpha = 0.7) +
       labs(title = "Activity Duration Distribution", x = "Duration (minutes)", y = "Frequency") +
       theme_minimal()
     
@@ -1101,7 +1157,7 @@ server <- function(input, output, session) {
     if(nrow(pace_data) > 0) {
       p <- ggplot(pace_data, aes(x = pace)) +
         geom_histogram(bins = 30, fill = "orange", alpha = 0.7) +
-        labs(title = "Pace Distribution", x = "Pace (min/km)", y = "Frequency") +
+        labs(title = "Pace Distribution running", x = "Pace (min/km)", y = "Frequency") +
         theme_minimal()
       
       ggplotly(p)
@@ -1145,12 +1201,17 @@ server <- function(input, output, session) {
     df <- data()
     
     cumulative_data <- df %>%
-      arrange(activity_date) %>%
-      mutate(cumulative_distance = cumsum(replace_na(distance_km, 0)))
+      arrange(activity_type, activity_date) %>%
+      group_by(activity_type) %>%
+      mutate(cumulative_distance = cumsum(replace_na(distance_km, 0))) %>%
+      ungroup()
     
-    p <- ggplot(cumulative_data, aes(x = activity_date, y = cumulative_distance)) +
-      geom_line(color = "darkblue", size = 1) +
-      labs(title = "Cumulative Distance Over Time", x = "Date", y = "Cumulative Distance (km)") +
+    p <- ggplot(cumulative_data, aes(x = activity_date, y = cumulative_distance, color = activity_type)) +
+      geom_line(size = 1) +
+      labs(
+        title = "Cumulative Distance Over Time by Activity Type",
+        x = "Date", y = "Cumulative Distance (km)", color = "Activity Type"
+      ) +
       theme_minimal()
     
     ggplotly(p)
