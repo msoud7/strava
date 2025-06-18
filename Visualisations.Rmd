@@ -251,6 +251,231 @@ df %>%
 
 ```
 
+# Biking performance statistics
+
+```{r only the bike rides}
+biking_data <- df %>% 
+  filter(activity_type == "Fietsrit")
+biking_data$training_load = biking_data$avg_power * biking_data$moving_time
+```
+
+## 🚴 Performance Over Time
+Speed / Power Progression
+
+Line plot: avg_speed, avg_power, or weighted_avg_power over time (activity_date)
+
+Option: Add rolling average or highlight races vs. training
+
+```{r power progression}
+ggplot(biking_data, aes(x = activity_date, y = avg_power)) +
+  geom_line(color = "steelblue") +
+  geom_point() +
+  geom_smooth() +
+  labs(title = paste("Cycling", gsub("_", " ", "avg_power"), "Over Time"),
+       x = "Date", y = gsub("_", " ", "avg_power")) +
+  theme_minimal()
+```
+
+```{r speed progression}
+ggplot(biking_data, aes(x = activity_date, y = speed)) +
+  geom_line(color = "steelblue") +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(title = paste("Cycling", gsub("_", " ", "speed"), "Over Time"),
+       x = "Date", y = gsub("_", " ", "speed")) +
+  theme_minimal()
+```
+
+## Power vs. Speed
+
+Scatter plot: avg_power vs. avg_speed
+
+Add color for bike_used or training_load
+
+```{r power versus speed}
+ggplot(data = biking_data, aes(x = speed, y = avg_power))+
+  geom_point() +
+  labs(
+    title = "Power versus speed",
+    subtitle = "Scatterplot of average power (W), versus average speed (km/h)",
+    x = "Average Speed (km/h)",
+    y = "Average Power (W)"
+  )
+```
+
+
+## Distance vs. Training Load
+
+Bubble plot: x = distance, y = training_load, size = duration_hours
+
+💪 Training Stress & Load
+Training Load Heatmap
+
+```{r bubble plot of distance and training load}
+ggplot(biking_data, aes(x = distance, y = training_load, size = moving_time)) +
+  geom_point(alpha = 0.6, color = "steelblue") +
+  scale_size_continuous(range = c(2, 12)) +
+  labs(title = "Distance vs. Training Load",
+       x = "Distance (km)", y = "Estimated Training Load",
+       size = "Duration (hrs)") +
+  theme_minimal()
+
+```
+
+
+Heatmap: training_load by month and weekday (or hour)
+
+Useful to find patterns in stress and rest
+
+Intensity Zone Analysis
+
+```{r heatmap of training_load by month and weekday}
+heat_data <- biking_data %>%
+  group_by(month, weekday) %>%
+  summarise(total_load = sum(training_load, na.rm = TRUE)) %>%
+  ungroup()
+
+# Heatmap
+ggplot(heat_data, aes(x = weekday, y = month, fill = total_load)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "C") +
+  labs(title = "Training Load Heatmap",
+       x = "Weekday", y = "Month", fill = "Total Load") +
+  theme_minimal()
+```
+
+Pie/donut chart of intensity distribution or histogram of perceived_exertion
+
+```{r pie/donut chart of intensity distribution (DISFUNCTIONAL), eval = F}
+intensity_counts <- biking_data %>%
+  count(intensity_zone)
+
+# Donut chart
+ggplot(intensity_counts, aes(x = 2, y = n, fill = intensity_zone)) +
+  geom_col(width = 1, color = "white") +
+  coord_polar(theta = "y") +
+  xlim(0.5, 2.5) +
+  theme_void() +
+  labs(title = "Intensity Zone Distribution", fill = "Zone") +
+  theme(legend.position = "right")
+```
+
+## ⛰️ Elevation and Effort
+Elevation Gain Efficiency
+
+Plot: elevation_gain_per_km vs. avg_speed or avg_power
+
+```{r}
+ggplot(data = biking_data, aes(x = elevation_difference / distance, y = speed)) +
+  geom_point()
+```
+
+
+Useful to assess climbing efficiency
+
+Total Ascent Over Time
+Cumulative line chart of total_ascent per ride or per week/month
+
+```{r}
+biking_data <- biking_data %>%
+  arrange(activity_date) %>%
+  mutate(cumulative_ascent = cumsum(elevation_difference))
+
+ggplot(biking_data, aes(x = activity_date, y = cumulative_ascent)) +
+  geom_line(color = "purple", size = 1) +
+  labs(title = "Cumulative Elevation Gain Over Time",
+       x = "Date", y = "Total Ascent (m)") +
+  theme_minimal()
+
+```
+
+## ❤️ Physiological Trends
+Heart Rate Zones Over Time
+
+Line plot: avg_heart_rate, with background zones (e.g. zone 1–5)
+
+Option: Add perceived_exertion as color gradient
+
+Scatter plot: avg_cadence vs. avg_power, color by avg_speed
+
+```{r}
+ggplot(data = biking_data, aes(x = avg_heart_rate, y = avg_power, color = speed)) +
+  geom_point()
+```
+
+
+🌦️ Environmental Impact
+Temperature vs. Performance
+
+Plot temperature vs. avg_speed or avg_power
+
+Option: Split by humidity or wind_speed
+
+Weather Effects
+
+Bar chart comparing average performance metrics (avg_speed, perceived_exertion) across different precipitation or wind_speed bins
+
+🧭 Ride Type & Temporal Insights
+
+Bar/heatmap: Number of rides or duration_hours by hour and weekday
+
+```{r number of rides by hour and weekday}
+biking_data %>%
+  count(weekday, hour) %>%
+  ggplot(aes(x = hour, y = n, fill = weekday)) +
+  geom_col(position = "dodge") +
+  labs(title = "Number of Rides by Hour and Weekday",
+       x = "Hour of Day", y = "Ride Count", fill = "Weekday") +
+  theme_minimal()
+```
+
+```{r heatmap Duration of Rides by Hour and Weekday}
+biking_data %>%
+  group_by(weekday, hour) %>%
+  summarise(total_hours = sum(moving_time / 3600, na.rm = TRUE)) %>%
+  ggplot(aes(x = hour, y = weekday, fill = total_hours)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(name = "Hours") +
+  labs(title = "Total Duration of Rides by Hour and Weekday",
+       x = "Hour of Day", y = "Weekday") +
+  theme_minimal()
+
+```
+
+📈 Custom Metrics
+Speed Ratio Over Time
+
+Line plot of speed_ratio (normalized speed) – good for detecting fatigue or form
+
+```{r}
+biking_data <- biking_data %>%
+  mutate(speed_ratio = avg_speed / max(avg_speed, na.rm = TRUE))
+
+ggplot(biking_data, aes(x = activity_date, y = speed_ratio)) +
+  geom_line(color = "darkorange") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linetype = "dashed") +
+  labs(title = "Speed Ratio Over Time",
+       x = "Date", y = "Speed Ratio (Normalized)") +
+  theme_minimal()
+```
+
+
+Efficiency Score
+
+Derived: avg_power / avg_heart_rate over time — a proxy for aerobic efficiency
+
+```{r}
+biking_data <- biking_data %>%
+  mutate(efficiency_score = avg_power / avg_heart_rate)
+
+ggplot(biking_data, aes(x = activity_date, y = efficiency_score)) +
+  geom_line(color = "seagreen") +
+  geom_smooth(method = "loess", se = FALSE, color = "black", linetype = "dashed") +
+  labs(title = "Efficiency Score Over Time",
+       x = "Date", y = "Avg Power / Avg Heart Rate") +
+  theme_minimal()
+```
+
 
 # Regression stuff
 
