@@ -20,60 +20,67 @@ cat("Removed observations with 0 usable variables:", length(colnames(activities)
 
 colSums(!is.na(df))
 
-#remove unnecessary observations with no statistical meaning
-df <- df %>% 
-  select(-c(Beschrijving.van.activiteit, Woon.werkverkeer, Privénotitie.activiteit, Uitrusting.voor.activiteit, Aantal.vermogensgegevens, Woon.werkverkeer.1, Uitrusting, Media, Bestandsnaam,
-            Weersomstandigheden, Buitentemperatuur, Gevoelstemperatuur, Dauwpunt, Vochtigheid, Luchtdruk, Windsnelheid, Windstoot, Windrichting, Neerslagintensiteit, Tijd.zonsondergang, Tijd.zonsopgang, Maanstand, Uitrusting, Kans.op.neerslag, Type.neerslag, Bewolking, Zicht, UV.index,
-            Verstreken.tijd.1, Afstand, Max..hartslag, Vergelijkbare.poging.1, Voorkeur.voor.ervaren.inspanning, Ervaren.vergelijkbare.poging, Van.upload, Gemeld, Afstand..onverharde.wegen., Trainingsbelasting, Totaalaantal.cycli, Gemiddelde.vergelijkbare.tempo.op.vlak.terrein
-  )) %>% 
-  rename(
-    activity_id = Activiteits.ID,
-    activity_date = Datum.van.activiteit,
-    activity_name = Naam.activiteit,
-    activity_type = Activiteitstype,
-    elapsed_time = Verstreken.tijd,
-    comparable_effort = Vergelijkbare.poging,
-    moving_time = Beweegtijd,
-    distance = Afstand.1,
-    max_speed = Max..snelheid,
-    avg_speed = Gemiddelde.snelheid,
-    total_ascent = Totale.stijging,
-    total_descent = Totale.daling,
-    min_elevation = Kleinste.hoogte,
-    max_elevation = Grootste.hoogte,
-    max_grade = Max..stijgingspercentage,
-    avg_grade = Gemiddeld.stijgingspercentage,
-    max_cadence = Max..cadans,
-    avg_cadence = Gemiddelde.cadans,
-    max_heart_rate = Max..hartslag.1,
-    avg_heart_rate = Gemiddelde.hartslag,
-    avg_power = Gemiddeld.wattage,
-    calories = Calorieën,
-    total_work = Totale.arbeid,
-    perceived_exertion = Ervaren.inspanning,
-    weighted_avg_power = Gewogen.gemiddeld.vermogen,
-    grade_adjusted_distance = Aan.stijgingspercentage.aangepaste.afstand,
-    weather_time = Tijd.weerbeeld,
-    avg_speed_elapsed = Gemiddelde.snelheid..op.basis.van.verstreken.tijd.,
-    total_steps = Totaal.aantal.stappen,
-    pool_length = Lengte.van.zwembad,
-    intensity = Intensiteit
-  ) %>% 
+# kolomnamen en hun gewenste nieuwe namen
+column_map <- c(
+  activity_id = "Activiteits.ID",
+  activity_date = "Datum.van.activiteit",
+  activity_name = "Naam.activiteit",
+  activity_type = "Activiteitstype",
+  elapsed_time = "Verstreken.tijd",
+  comparable_effort = "Vergelijkbare.poging",
+  moving_time = "Beweegtijd",
+  distance = "Afstand.1",
+  max_speed = "Max..snelheid",
+  avg_speed = "Gemiddelde.snelheid",
+  total_ascent = "Totale.stijging",
+  total_descent = "Totale.daling",
+  min_elevation = "Kleinste.hoogte",
+  max_elevation = "Grootste.hoogte",
+  max_grade = "Max..stijgingspercentage",
+  avg_grade = "Gemiddeld.stijgingspercentage",
+  max_cadence = "Max..cadans",
+  avg_cadence = "Gemiddelde.cadans",
+  max_heart_rate = "Max..hartslag.1",
+  avg_heart_rate = "Gemiddelde.hartslag",
+  avg_power = "Gemiddeld.wattage",
+  calories = "Calorieën",
+  total_work = "Totale.arbeid",
+  perceived_exertion = "Ervaren.inspanning",
+  weighted_avg_power = "Gewogen.gemiddeld.vermogen",
+  grade_adjusted_distance = "Aan.stijgingspercentage.aangepaste.afstand",
+  weather_time = "Tijd.weerbeeld",
+  avg_speed_elapsed = "Gemiddelde.snelheid..op.basis.van.verstreken.tijd.",
+  total_steps = "Totaal.aantal.stappen",
+  pool_length = "Lengte.van.zwembad",
+  intensity = "Intensiteit"
+)
+
+# selecteer alleen bestaande kolommen
+existing_columns <- column_map[column_map %in% names(df)]
+data_selected <- df %>% select(any_of(existing_columns))
+# hernoem kolommen naar Engelse namen
+names(data_selected) <- names(existing_columns)
+
+# veilige mutate met checks
+data_selected <- data_selected %>%
   mutate(
-    activity_date = parse_date_time(activity_date, orders = "d b Y H:M:S", locale = "nl_NL.UTF-8"),
-    hour = hour(activity_date),
-    weekday = wday(activity_date, label = TRUE, locale = "nl_NL.UTF-8"),
-    week = week(activity_date),
-    month = month(activity_date, label = TRUE, locale = "nl_NL.UTF-8"),
-    year = year(activity_date),
-    distance_km = distance / 1000, #distance in km
-    pace = if_else(activity_type == "Hardloopsessie",                    # only for running m/s
-                   moving_time / 60 / distance_km, 
-                   NA_real_),
-    speed = distance_km / (moving_time / 3600), #km/h
-    elevation_difference = max_elevation - min_elevation,
+    activity_date = if ("activity_date" %in% names(.)) parse_date_time(activity_date, orders = "d b Y H:M:S", locale = "nl_NL.UTF-8") else NA,
+    hour = if ("activity_date" %in% names(.)) hour(activity_date) else NA,
+    weekday = if ("activity_date" %in% names(.)) wday(activity_date, label = TRUE, locale = "nl_NL.UTF-8") else NA,
+    week = if ("activity_date" %in% names(.)) week(activity_date) else NA,
+    month = if ("activity_date" %in% names(.)) month(activity_date, label = TRUE, locale = "nl_NL.UTF-8") else NA,
+    year = if ("activity_date" %in% names(.)) year(activity_date) else NA,
+    distance_km = if ("distance" %in% names(.)) distance / 1000 else NA,
+    pace = if (all(c("activity_type", "moving_time", "distance") %in% names(.))) {
+      if_else(activity_type == "Hardloopsessie", moving_time / 60 / (distance / 1000), NA_real_)
+    } else NA_real_,
+    speed = if (all(c("distance", "moving_time") %in% names(.))) {
+      (distance / 1000) / (moving_time / 3600)
+    } else NA_real_,
+    elevation_difference = if (all(c("max_elevation", "min_elevation") %in% names(.))) {
+      max_elevation - min_elevation
+    } else NA_real_
   )
 
-  
-
-write_csv(df, "strava_data/cleaned_subset.csv")
+# schrijf veilig weg
+write_csv(data_selected, "strava_data/cleaned_subset.csv")
