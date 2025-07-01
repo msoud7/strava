@@ -46,6 +46,10 @@ if ("Hardloopsessie" %in% distance_summary$activity_type) {
 if ("Fietsrit" %in% distance_summary$activity_type) {
   cat("Total distance biked:", distance_summary$total_distance_km[distance_summary$activity_type == "Fietsrit"], "kilometers\n")
 }
+
+if ("Zwemmen" %in% distance_summary$activity_type) {
+  cat("Total distance swam:", distance_summary$total_distance_km[distance_summary$activity_type == "Zwemmen"], "kilometers\n")
+}
 ```
 
 # Training Load statistics
@@ -195,16 +199,6 @@ ggplot(df %>% filter(activity_type == "Hardloopsessie"), aes(x = as.Date(activit
 
 ```
 
-```{r distribution of pace}
-df %>%
-  filter(activity_type == "Hardloopsessie", !is.na(pace)) %>%
-  ggplot(aes(x = activity_type, y = pace)) +
-  geom_violin(fill = "skyblue") +
-  geom_boxplot(width = 0.1, fill = "white") +
-  labs(title = "Distribution of Pace for Running Sessions", y = "Pace (min/km)") +
-  theme_minimal()
-```
-
 ```{r pace improvement over time}
 df %>%
   filter(activity_type == "Hardloopsessie", !is.na(pace)) %>%
@@ -214,7 +208,6 @@ df %>%
   scale_y_reverse() +
   labs(title = "Running Pace Over Time", y = "Pace (min/km)", x = "Date") +
   theme_minimal()
-
 ```
 
 ```{r training load proxy}
@@ -255,7 +248,13 @@ df %>%
 
 ```{r only the bike rides}
 biking_data <- df %>% 
-  filter(activity_type == "Fietsrit")
+  filter(activity_type == "Fietsrit",
+         speed >= 2,
+         speed <= 60,
+         distance > 100,
+         elevation_difference / distance <= 0.15,
+         speed > 10,
+         year > 2010)
 biking_data$training_load = biking_data$avg_power * biking_data$moving_time
 ```
 
@@ -267,17 +266,21 @@ Line plot: avg_speed, avg_power, or weighted_avg_power over time (activity_date)
 Option: Add rolling average or highlight races vs. training
 
 ```{r power progression}
-ggplot(biking_data, aes(x = activity_date, y = avg_power)) +
+ggplot(biking_data %>% filter(!is.na(avg_power)), aes(x = activity_date, y = avg_power)) +
   geom_line(color = "steelblue") +
   geom_point() +
   geom_smooth() +
-  labs(title = paste("Cycling", gsub("_", " ", "avg_power"), "Over Time"),
-       x = "Date", y = gsub("_", " ", "avg_power")) +
+  labs(
+    title = paste("Cycling", gsub("_", " ", "avg_power"), "Over Time"),
+    x = "Date",
+    y = gsub("_", " ", "avg_power")
+  ) +
   theme_minimal()
+  
 ```
 
 ```{r speed progression}
-ggplot(biking_data, aes(x = activity_date, y = speed)) +
+ggplot(biking_data %>% filter(year > 2010), aes(x = activity_date, y = speed)) +
   geom_line(color = "steelblue") +
   geom_point() +
   geom_smooth(method = "lm") +
@@ -293,7 +296,7 @@ Scatter plot: avg_power vs. avg_speed
 Add color for bike_used or training_load
 
 ```{r power versus speed}
-ggplot(data = biking_data, aes(x = speed, y = avg_power))+
+ggplot(data = biking_data, aes(x = speed, y = avg_power, color = training_load))+
   geom_point() +
   labs(
     title = "Power versus speed",
@@ -344,28 +347,12 @@ ggplot(heat_data, aes(x = weekday, y = month, fill = total_load)) +
   theme_minimal()
 ```
 
-Pie/donut chart of intensity distribution or histogram of perceived_exertion
-
-```{r pie/donut chart of intensity distribution (DISFUNCTIONAL), eval = F}
-intensity_counts <- biking_data %>%
-  count(intensity_zone)
-
-# Donut chart
-ggplot(intensity_counts, aes(x = 2, y = n, fill = intensity_zone)) +
-  geom_col(width = 1, color = "white") +
-  coord_polar(theta = "y") +
-  xlim(0.5, 2.5) +
-  theme_void() +
-  labs(title = "Intensity Zone Distribution", fill = "Zone") +
-  theme(legend.position = "right")
-```
-
 ## ⛰️ Elevation and Effort
 Elevation Gain Efficiency
 
 Plot: elevation_gain_per_km vs. avg_speed or avg_power
 
-```{r}
+```{r elevation gain versus speed}
 ggplot(data = biking_data, aes(x = elevation_difference / distance, y = speed)) +
   geom_point()
 ```
@@ -415,7 +402,7 @@ Weather Effects
 
 Bar chart comparing average performance metrics (avg_speed, perceived_exertion) across different precipitation or wind_speed bins
 
-🧭 Ride Type & Temporal Insights
+## 🧭 Ride Type & Temporal Insights
 
 Bar/heatmap: Number of rides or duration_hours by hour and weekday
 
@@ -442,7 +429,7 @@ biking_data %>%
 
 ```
 
-📈 Custom Metrics
+## 📈 Custom Metrics
 Speed Ratio Over Time
 
 Line plot of speed_ratio (normalized speed) – good for detecting fatigue or form
@@ -473,6 +460,118 @@ ggplot(biking_data, aes(x = activity_date, y = efficiency_score)) +
   geom_smooth(method = "loess", se = FALSE, color = "black", linetype = "dashed") +
   labs(title = "Efficiency Score Over Time",
        x = "Date", y = "Avg Power / Avg Heart Rate") +
+  theme_minimal()
+```
+
+# Swimming visualisations
+
+```{r}
+swimming_data <- df %>% 
+  filter(activity_type == "Zwemmen") %>%
+  mutate(pace_per_100m = (elapsed_time / distance) * 100)
+```
+
+## Pace over time
+
+```{r}
+ggplot(swimming_data, aes(x = activity_date, y = pace_per_100m)) +
+  geom_point(color = "darkblue")
+  labs(title = "Swimming Pace Over Time",
+       y = "Pace (sec per 100m)", x = "Date") +
+  theme_minimal()
+```
+
+## Training load swimming
+
+```{r seasonality}
+swimming_data %>%
+  group_by(year, month) %>%
+  summarise(monthly_distance = sum(distance_km, na.rm = TRUE)) %>%
+  ggplot(aes(x = interaction(year, month, sep = "-"), y = monthly_distance)) +
+  geom_col(fill = "skyblue") +
+  labs(title = "Monthly Swim Distance", x = "Month", y = "Distance (km)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
+```{r heatmap of swimming data}
+swim_heatmap <- swimming_data %>%
+  group_by(month, weekday) %>%
+  summarise(total_distance = sum(distance, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(swim_heatmap, aes(x = weekday, y = month, fill = total_distance)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c() +
+  labs(title = "Swim Distance Heatmap", x = "Weekday", y = "Month", fill = "Total Distance (m)") +
+  theme_minimal()
+```
+
+```{r duration}
+ggplot(swimming_data, aes(x = moving_time / 60)) +  # minutes
+  geom_histogram(fill = "lightblue", bins = 30) +
+  labs(title = "Distribution of Swim Durations", x = "Duration (minutes)", y = "Count") +
+  theme_minimal()
+```
+
+
+## swimming efficiency
+
+```{r}
+swimming_data <- swimming_data %>%
+  mutate(efficiency = distance / moving_time)  # meters per second
+
+ggplot(swimming_data, aes(x = activity_date, y = efficiency)) +
+  geom_point() +
+  geom_line(color = "steelblue") +
+  labs(title = "Swimming Efficiency Over Time",
+       x = "Date", y = "Speed (m/s)") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(swimming_data, aes(x = distance_km, y = calories)) +
+  geom_point(alpha = 0.6, color = "coral") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "Calories vs Swim Distance", x = "Distance (km)", y = "Calories") +
+  theme_minimal()
+```
+
+```{r aerobic efficiency over time}
+swimming_data$efficiency_score <- swimming_data$speed / swimming_data$avg_heart_rate
+
+ggplot(swimming_data, aes(x = activity_date, y = efficiency_score)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "loess", se = FALSE, color = "black") +
+  labs(title = "Swim Efficiency Over Time", y = "Speed / Avg HR", x = "Date") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(swimming_data, aes(x = pace_per_100m, y = avg_heart_rate)) +
+  geom_point(alpha = 0.6, color = "tomato") +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  labs(title = "Heart Rate vs Swim Pace", x = "Pace (sec/100m)", y = "Avg Heart Rate (bpm)") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(swimming_data, aes(x = avg_heart_rate)) +
+  geom_histogram(fill = "lightblue", bins = 20) +
+  labs(title = "Distribution of Average Heart Rate", x = "Avg HR (bpm)", y = "Count") +
+  theme_minimal()
+
+```
+
+```{r}
+swimming_data %>%
+  group_by(week) %>%
+  summarise(mean_hr = mean(avg_heart_rate, na.rm = TRUE)) %>%
+  ggplot(aes(x = week, y = mean_hr)) +
+  geom_line(color = "dodgerblue") +
+  labs(title = "Weekly Avg Heart Rate", x = "Week", y = "Avg HR") +
   theme_minimal()
 ```
 
